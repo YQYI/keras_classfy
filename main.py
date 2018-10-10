@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
+import yaml
+from keras.models import model_from_yaml
 from keras.models import Model
 from keras.layers import *
 from keras.optimizers import *
@@ -11,13 +13,9 @@ import numpy as np
 import cv2
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  #设置需要使用的GPU的编号
-config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 1 #设置使用GPU容量占GPU总容量的比例
-sess = tf.Session(config=config)
-KTF.set_session(sess)
-
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 def create_model(w, h, num):
     input_tensor = Input(shape = (w, h, 3))
@@ -33,14 +31,18 @@ def create_model(w, h, num):
     return model
 
 def create_path_list(total_dir):
+    import json
     # create path list
     path_list = []
     label = 0
+    dict = {}
     for i in os.listdir(total_dir):
         for j in os.listdir(os.path.join(total_dir, i)):
             path_list.append([os.path.join(total_dir, i, j), label])
+        dict[label] = i
         label += 1
     np.random.shuffle(path_list)
+    json.dump(dict, open("class_dict.json", "w"))
     print(path_list)
     return path_list
 
@@ -62,13 +64,23 @@ def data_generator(path_list, batch_size, w, h, num):
         label_data = np_utils.to_categorical(label_data, num)
         yield image_data, label_data
 
+def draw_loss(keras_history):
+    plt.plot(keras_history.history['val_acc'], color = 'blue', label = 'val_acc')
+    plt.plot(keras_history.history['loss'], color = 'green', label = 'train_loss')
+    plt.plot(keras_history.history['acc'], color = 'red', label = 'train_acc')
+    plt.legend()
+    plt.title('crowd classification')
+    plt.xlabel("epoch")
+    plt.ylabel("rate")
+    plt.savefig("loss.png")
+
 def train():
     # parameter
-    w = 224
-    h = 224
-    batch_size = 2
+    w = 200
+    h = 200
+    batch_size = 30
     num = 7
-    epoch = 200
+    epoch = 2
     total_dir = "root"
     # create model
     model = create_model(w, h, num)
@@ -80,7 +92,7 @@ def train():
     # 保存模型回调函数，保存最优模型
     checkpointer = ModelCheckpoint(filepath="checkpoint-{epoch:02d}e-val_acc_{val_acc:.2f}.hdf5",
             monitor = "val_acc",
-            save_best_only=True, verbose=1,  period=5)
+            save_best_only=True, verbose=1,  period=1)
     # 训练模型，并返回训练过程中的中间数据
     history = model.fit_generator(
             data_generator(train_list, batch_size, w, h, num),
@@ -90,10 +102,20 @@ def train():
             steps_per_epoch = len(train_list)//batch_size,
             verbose = 1,
             callbacks = [checkpointer])
+    yaml_string = model.to_yaml()
+    open('model_structure.yaml', 'w').write(yaml_string)
+    draw_loss(history)
+
+def predict(image_path):
+    model = model_from_yaml(open('model_structure.yaml').read())
+    model.load_weights('weights.hdf5')
+    image = cv2.resize(cv2.imread(image_path), (200, 200))
+    image = np.array([image])
+    result = model.predict(image)
+    print(np.argmin(result, axis=1))
 
 
 
 if __name__ == "__main__":
     train()
-
 
