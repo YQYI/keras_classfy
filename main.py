@@ -10,7 +10,8 @@ from keras.utils import np_utils
 from keras.applications.resnet50 import ResNet50
 import os
 import numpy as np
-import cv2
+from skimage import io
+from skimage import transform
 import tensorflow as tf
 import keras.backend.tensorflow_backend as KTF
 import matplotlib
@@ -53,8 +54,8 @@ def data_generator(path_list, batch_size, w, h, num):
         image_data = []
         label_data = []
         for j in range(batch_size):
-            image = cv2.imread(path_list[i][0])
-            image = cv2.resize(image, (w, h))
+            image = io.imread(path_list[i][0])
+            image = transform.resize(image, (w, h))
             label = path_list[i][1]
             image_data.append(image)
             label_data.append(label)
@@ -109,7 +110,7 @@ def train():
 def predict(image_path):
     model = model_from_yaml(open('model_structure.yaml').read())
     model.load_weights('weights.hdf5')
-    image = cv2.resize(cv2.imread(image_path), (200, 200))
+    image = transform.resize(io.imread(image_path), (200, 200))
     image = np.array([image])
     result = model.predict(image)
     print(np.argmin(result, axis=1))
